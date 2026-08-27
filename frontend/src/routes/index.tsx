@@ -1,9 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute('/')({
-  component: Index,
+
+export const Route = createFileRoute("/")({
+    component: Index,
 })
 
 function Index() {
-  return <div>Hello "/"!</div>
+    return (
+        <>
+
+        </>
+    )
 }
+
+// add index.test.tsx (look into react testing library, and probably playwright)
