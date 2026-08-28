@@ -44,6 +44,7 @@ impl FileCharter {
     }
 
     pub fn get_dir_files(&self, directory: String) -> Option<Vec<String>> {
+        println!("{}", &directory);
         let root_path = std::env::home_dir().unwrap();
         let deep_dir = root_path.join(directory);
 
