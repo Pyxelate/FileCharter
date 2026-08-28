@@ -7,10 +7,7 @@ import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import { routeTree } from './routeTree.gen'
 
 // Create a new router instance
-const router = createRouter({ routeTree, defaultRemountDeps: ({ params, search }) => ({
-        ...params,
-        ...search,
-    }), })
+const router = createRouter({ routeTree })
 const client = new QueryClient();
 
 // Register the router instance for type safety

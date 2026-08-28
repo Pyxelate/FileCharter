@@ -10,11 +10,12 @@ const Files = z.object({
 type FileData = z.infer<typeof Files>;
 
 export const Route = createFileRoute("/")({
-
     component: Index,
 })
 
 async function getFiles(): Promise<FileData> {
+
+
     const response = await fetch("http://localhost:8080/");
 
     const result = Files.safeParse(await response.json());
@@ -33,26 +34,21 @@ export function Index() {
         queryKey: ["files"],
         queryFn: getFiles,
     });
-    // issues: communication between the frontend and backend is too slow, fetch could be shit.
+
     if (isPending) return <div>Loading...</div>;
     if (isError) return <div>Something went wrong {error.message}</div>
 
 
     return (
         <>
-            <main>
-                <div>
-                    <ul className={"grid grid-cols-5 gap-1"}>
-                        {/* Add option to hide or unhide files with . hidden extension.*/}
-                        {data.directory.map((file) => {
-                            return <File key={file} item={file} />
-                        })}
-                    </ul>
-                </div>
-            </main>
-
+            <ul>
+                {/* Add option to hide or unhide files with . hidden extension.*/}
+                {data.directory.map((file) => {
+                    return <File item={file} />
+                })}
+            </ul>
         </>
     )
 }
 
-// add -index.test.tsx (look into react testing library, and probably playwright)
+// add index.test.tsx (look into react testing library, and probably playwright)

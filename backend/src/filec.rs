@@ -46,8 +46,6 @@ impl FileCharter {
     pub fn get_dir_files(&self, directory: String) -> Option<Vec<String>> {
         let root_path = std::env::home_dir().unwrap();
         let deep_dir = root_path.join(directory);
-        println!("{:?}", &deep_dir);
-
 
         let registries = read_dir(deep_dir);
         if let Ok(registry) = registries {
@@ -65,8 +63,6 @@ impl FileCharter {
             }
         } else {None}
     }
-
-
 
     // pub fn delete(&self, item: &str) -> Result<(), ()> {
     //     let splitted: Vec<_> = item.split(".").into_iter().collect();
@@ -90,24 +86,21 @@ impl FileCharter {
     //     }
     // }
 
-    pub async fn download(&self, file: String) -> Result<((Body,[(HeaderName, String); 2])),()> {
-        let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
-        println!("{file}");
-        let deep_dir = &root_path.join(&file);
+    pub async fn download(&self, file: &str) -> Result<impl IntoResponse, (StatusCode, String)> {
+        let full_path = PathBuf::from(file).canonicalize().unwrap();
 
-
-        let open = tokio::fs::File::open(&deep_dir).await.unwrap();
+        let open = tokio::fs::File::open(&full_path).await.unwrap();
         let read_content = ReaderStream::new(open);
 
         let body = Body::from_stream(read_content);
 
         let headers: [(HeaderName, String); 2] = [
             (header::CONTENT_TYPE, "application/octet-stream".to_string()), (
-                header::CONTENT_DISPOSITION, format!("attachment/ filename=\"{:?}\"", deep_dir)
+                header::CONTENT_DISPOSITION, format!("attachment/ filename=\"{:?}\"", full_path)
             ),
         ];
 
-        Ok((body, headers))
+        Ok((headers, body))
     }
 }
 

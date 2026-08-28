@@ -8,9 +8,8 @@ use axum::{
     Router,
     routing::get,
     Json,
-    body::Bytes,
 };
-use axum::http::{header, Method, StatusCode};
+use axum::http::{Method, StatusCode};
 use axum_extra::either::Either;
 use crate::filec::FileCharter;
 use serde::Serialize;
@@ -44,8 +43,6 @@ impl Server {
         // with state, requres the impl to have the trait Clone #[derive(Clone)], because it passes a new veresion of it everywhere.
         let app = Router::new().route("/", get(serve_root_dir))
             .route("/{*filename}", get(serve_dir))
-            .route("/preview/{*image}", get(preview_image))
-            .route("/download/{*file}", get(download_file))
             .with_state(fileCharter)// Canonicalise at some point to stop bad attackeres.
             .layer(
                 ServiceBuilder::new().layer(cors)
@@ -104,33 +101,6 @@ async fn serve_dir(State(state): State<FileCharter>, Path(filename): Path<String
         }
     }
 }
-
-async fn preview_image(Path(image): Path<String>) -> impl IntoResponse {
-    let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
-    let deep_dir = &root_path.join(&image);
-    println!("{deep_dir:?}");
-    let img = std::fs::read(deep_dir).unwrap();
-
-    (
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "image/png"),
-            (header::CACHE_CONTROL, "public, max-age=31536000")
-        ],
-        Bytes::from(img)
-        )
-}
-
-async fn download_file(State(state): State<FileCharter>, Path(file): Path<String>)  -> impl IntoResponse {
-    let item = state.download(file).await.unwrap();
-    let (body, header) = item;
-    (
-        StatusCode::OK,
-        header,
-        body,
-        )
-}
-
 //
 // async fn delete_item(State(state): State<FileCharter>, Path(path): Path<&str>) -> String {
 //     let result = state.delete(path);
