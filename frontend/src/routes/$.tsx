@@ -36,6 +36,7 @@ async function getFiles(directory: String): Promise<FileData> {
 
 function RouteComponent() {
     const { _splat } = Route.useParams();
+    console.log(_splat)
     const {data, isPending, isError, error} = useQuery({
         queryKey: ["files"],
         queryFn: () => getFiles(_splat as String),
@@ -47,12 +48,16 @@ function RouteComponent() {
 
     return (
         <>
-            <ul>
-                {/* Add option to hide or unhide files with . hidden extension.*/}
-                {data.directory.map((file) => {
-                    return <File item={file} />
-                })}
-            </ul>
+            <main>
+                <div>
+                    <ul className={"grid grid-cols-5 gap-1"}>
+                        {/* Add option to hide or unhide files with . hidden extension.*/}
+                        {data.directory.map((file) => {
+                            return <File key={file} item={file} />
+                        })}
+                    </ul>
+                </div>
+            </main>
         </>
     )
 }
