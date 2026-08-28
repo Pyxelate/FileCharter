@@ -1,14 +1,52 @@
 import { createFileRoute } from "@tanstack/react-router";
+import * as z from "zod";
+import {useQuery} from "@tanstack/react-query";
+import {File} from "../components/File.tsx";
 
+const Files = z.object({
+        directory: z.array(z.string()),
+})
+
+type FileData = z.infer<typeof Files>;
 
 export const Route = createFileRoute("/")({
     component: Index,
 })
 
-function Index() {
+async function getFiles(): Promise<FileData> {
+
+
+    const response = await fetch("http://localhost:8080/");
+
+    const result = Files.safeParse(await response.json());
+    if (result.success) {
+        return result.data
+    } else {
+        console.log(result.error.issues);
+        return Promise.reject("e");
+    }
+}
+
+
+export function Index() {
+
+    const {data, isPending, isError, error} = useQuery({
+        queryKey: ["files"],
+        queryFn: getFiles,
+    });
+
+    if (isPending) return <div>Loading...</div>;
+    if (isError) return <div>Something went wrong {error.message}</div>
+
+
     return (
         <>
-
+            <ul>
+                {/* Add option to hide or unhide files with . hidden extension.*/}
+                {data.directory.map((file) => {
+                    return <File item={file} />
+                })}
+            </ul>
         </>
     )
 }

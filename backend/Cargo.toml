@@ -9,3 +9,5 @@ axum-extra = "0.12.6"
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
+tower = "0.5.3"
+tower-http = { version = "0.7.0", features = ["cors"] }
