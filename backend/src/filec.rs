@@ -44,9 +44,10 @@ impl FileCharter {
     }
 
     pub fn get_dir_files(&self, directory: String) -> Option<Vec<String>> {
-        println!("{}", &directory);
         let root_path = std::env::home_dir().unwrap();
         let deep_dir = root_path.join(directory);
+        println!("{:?}", &deep_dir);
+
 
         let registries = read_dir(deep_dir);
         if let Ok(registry) = registries {
@@ -64,6 +65,8 @@ impl FileCharter {
             }
         } else {None}
     }
+
+
 
     // pub fn delete(&self, item: &str) -> Result<(), ()> {
     //     let splitted: Vec<_> = item.split(".").into_iter().collect();
