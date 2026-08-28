@@ -1,5 +1,19 @@
-import {EllipsisVertical, Folder} from "lucide-react";
+import {EllipsisVertical, Folder, FileText, FileArchive} from "lucide-react";
 import { useRouterState, useNavigate } from "@tanstack/react-router";
+
+
+function IconType({str}: {str: string[]}) {
+
+    if (str.length == 1) {
+        return <Folder/>
+    }
+
+    if (str.includes("zip")) {
+        return <FileArchive />
+    } else {
+        return <FileText/>
+    }
+}
 
 export function File({ item }: {item: string}) {
     // expects a vector of paths, could be a file or directory.
@@ -14,6 +28,8 @@ export function File({ item }: {item: string}) {
     }
 
 
+
+
     async function continueDirectory(directory: String) {
         const {pathname} = routerState.location;
         const fullPath = pathname + "/" + directory;
@@ -24,7 +40,7 @@ export function File({ item }: {item: string}) {
         <div>
             <span className={"flex"}>
                 <button onClick={() => continueDirectory(item)} aria-label={"extra"} className={"cursor-pointer"}>
-                    <Folder />
+                   <IconType str={strSplit} />
                 </button>
 
                 <button aria-label={"extra"} className={"cursor-pointer"}>
