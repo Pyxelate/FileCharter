@@ -35,9 +35,22 @@ function PreviewImg({src, setSrc}) {
     )
 }
 
+
+function PreviewFile({src, setSrc}) {
+    return (
+        <div className={"bg-black/95 z-100  absolute w-full h-full flex justify-center items-center"}>
+            <button onClick={() => setSrc("")}><DoorClosed className={"bg-white"}/></button>
+            <div className={"h-auto relative"}>
+                <p className={"text-white"}>{src}</p>
+            </div>
+        </div>
+    )
+}
 export function File({ item }: {item: string}) {
     // expects a vector of paths, could be a file or directory.
     const [contentPreview, setContentPreview] = useState("");
+    const [fileContentPreview, setfileContentPreview] = useState("");
+
     const routerState = useRouterState();
     const navigate = useNavigate();
 
@@ -63,11 +76,31 @@ export function File({ item }: {item: string}) {
             let response = await fetch(`http://localhost:8080/preview/${new_slice}`);
             let blob = await response.blob();
             const imgUrl = URL.createObjectURL(blob);
-            setContentPreview(imgUrl);
+            setfileContentPreview(imgUrl);
+            return
+        }
+
+        if (directory.includes("txt") || directory.includes("md"))  {
+
+            let item = await read_content(directory);
+            setfileContentPreview(item);
             return
         }
 
         await navigate({to: fullPath});
+    }
+
+    async function read_content(item) {
+        const {pathname} = routerState.location;
+        const fullPath = pathname + "/" + item;
+        let new_slice = "";
+        if (fullPath[0] == "/") {
+            new_slice = fullPath.substring(1, fullPath.length);
+        }
+
+        let response = await fetch(`http://localhost:8080/read/${new_slice}`);
+        let data = await response.json();
+        return data
     }
 
     async function download_file(item) {
@@ -100,6 +133,7 @@ export function File({ item }: {item: string}) {
     return (
         <>
             {contentPreview.length > 0 && <PreviewImg src={contentPreview} setSrc={setContentPreview}/>}
+            {fileContentPreview.length > 0 && <PreviewFile src={fileContentPreview} setSrc={setfileContentPreview}/>}
             <div className={"relative"}>
 
                 <span className={"flex"}>

@@ -55,4 +55,5 @@ export function Index() {
     )
 }
 
+// TODO: Add functionaliity to view text files, when pressing on the actual file instead of pressing download fix bug for it. make ui nice. clean up code. add search feature, add upload file. add security, implement mongo db.
 // add -index.test.tsx (look into react testing library, and probably playwright)
