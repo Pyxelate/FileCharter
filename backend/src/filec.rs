@@ -90,21 +90,24 @@ impl FileCharter {
     //     }
     // }
 
-    pub async fn download(&self, file: &str) -> Result<impl IntoResponse, (StatusCode, String)> {
-        let full_path = PathBuf::from(file).canonicalize().unwrap();
+    pub async fn download(&self, file: String) -> Result<((Body,[(HeaderName, String); 2])),()> {
+        let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
+        println!("{file}");
+        let deep_dir = &root_path.join(&file);
 
-        let open = tokio::fs::File::open(&full_path).await.unwrap();
+
+        let open = tokio::fs::File::open(&deep_dir).await.unwrap();
         let read_content = ReaderStream::new(open);
 
         let body = Body::from_stream(read_content);
 
         let headers: [(HeaderName, String); 2] = [
             (header::CONTENT_TYPE, "application/octet-stream".to_string()), (
-                header::CONTENT_DISPOSITION, format!("attachment/ filename=\"{:?}\"", full_path)
+                header::CONTENT_DISPOSITION, format!("attachment/ filename=\"{:?}\"", deep_dir)
             ),
         ];
 
-        Ok((headers, body))
+        Ok((body, headers))
     }
 }
 

@@ -36,7 +36,6 @@ async function getFiles(directory: String): Promise<FileData> {
 
 function RouteComponent() {
     const { _splat } = Route.useParams();
-    console.log(_splat)
     const {data, isPending, isError, error} = useQuery({
         queryKey: ["files"],
         queryFn: () => getFiles(_splat as String),

@@ -45,6 +45,7 @@ impl Server {
         let app = Router::new().route("/", get(serve_root_dir))
             .route("/{*filename}", get(serve_dir))
             .route("/preview/{*image}", get(preview_image))
+            .route("/download/{*file}", get(download_file))
             .with_state(fileCharter)// Canonicalise at some point to stop bad attackeres.
             .layer(
                 ServiceBuilder::new().layer(cors)
@@ -117,6 +118,16 @@ async fn preview_image(Path(image): Path<String>) -> impl IntoResponse {
             (header::CACHE_CONTROL, "public, max-age=31536000")
         ],
         Bytes::from(img)
+        )
+}
+
+async fn download_file(State(state): State<FileCharter>, Path(file): Path<String>)  -> impl IntoResponse {
+    let item = state.download(file).await.unwrap();
+    let (body, header) = item;
+    (
+        StatusCode::OK,
+        header,
+        body,
         )
 }
 

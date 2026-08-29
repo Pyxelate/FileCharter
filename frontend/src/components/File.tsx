@@ -1,7 +1,15 @@
-import {EllipsisVertical, Folder, FileText, FileArchive} from "lucide-react";
+import {EllipsisVertical, Folder, FileText, FileArchive, DoorClosed} from "lucide-react";
 import { useRouterState, useNavigate } from "@tanstack/react-router";
 import {useState} from "react";
-
+import {PopoverBasic} from "./PopoverDefault";
+import {
+    Popover,
+    PopoverContent,
+    PopoverDescription,
+    PopoverHeader,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/shadcn-components/ui/popover"
 
 function IconType({str}: {str: string[]}) {
 
@@ -18,9 +26,12 @@ function IconType({str}: {str: string[]}) {
 
 function PreviewImg({src, setSrc}) {
     return (
-        <>
-            <img src={src} alt={"Test"}/>
-        </>
+        <div className={"bg-black/95 z-100  absolute w-full h-full flex justify-center items-center"}>
+            <button onClick={() => setSrc("")}><DoorClosed className={"bg-white"}/></button>
+            <div className={"h-auto relative"}>
+                <img className={"w-200 h-auto"} src={src} alt={"Test"}/>
+            </div>
+        </div>
     )
 }
 
@@ -42,8 +53,9 @@ export function File({ item }: {item: string}) {
 
         const {pathname} = routerState.location;
         const fullPath = pathname + "/" + directory;
+        const imageFormat = ["jpg", "png"];
 
-        if (fullPath.includes(".png")) {
+        if (imageFormat.some(i =>fullPath.includes(i))) {
             let new_slice = "";
             if (fullPath[0] == "/") {
                  new_slice = fullPath.substring(1, fullPath.length);
@@ -58,19 +70,56 @@ export function File({ item }: {item: string}) {
         await navigate({to: fullPath});
     }
 
+    async function download_file(item) {
+        const {pathname} = routerState.location;
+        const fullPath = pathname + "/" + item;
+        let new_slice = "";
+        if (fullPath[0] == "/") {
+            new_slice = fullPath.substring(1, fullPath.length);
+        }
+
+        let file = await fetch(`http://localhost:8080/download/${new_slice}`)
+        let blob = await file.blob();
+        // Try catch.
+        // In order to do things with a stream of bytes/data, it must be serlialized to blob.
+        let url = window.URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${item}`);
+
+        // Creates invisible link and auto downloads item.
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+
+        // 5. Clean up the object URL
+        window.URL.revokeObjectURL(url);
+    }
+
     return (
-        <div>
+        <>
             {contentPreview.length > 0 && <PreviewImg src={contentPreview} setSrc={setContentPreview}/>}
-            <span className={"flex"}>
+            <div className={"relative"}>
+
+                <span className={"flex"}>
                 <button onClick={() => continueDirectory(item)} aria-label={"extra"} className={"cursor-pointer"}>
                    <IconType str={strSplit} />
                 </button>
 
                 <button aria-label={"extra"} className={"cursor-pointer"}>
-                    <EllipsisVertical />
+                    <PopoverBasic>
+                        <PopoverTitle>Download File</PopoverTitle>
+                        <PopoverDescription>
+                            <button className={"cursor-pointer"} onClick={() => download_file(item)}>Download</button>
+                        </PopoverDescription>
+
+                    </PopoverBasic>
                 </button>
             </span>
-            <h2 className={"mt-0 mb-10 text-xs"}>{item}</h2>
-        </div>
+                <h2 className={"mt-0 mb-10 text-xs"}>{item}</h2>
+            </div>
+        </>
+
     )
 }

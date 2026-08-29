@@ -18,7 +18,6 @@ async function getFiles(): Promise<FileData> {
     const response = await fetch("http://localhost:8080/");
 
     const result = Files.safeParse(await response.json());
-    console.log(result)
     if (result.success) {
         return result.data
     } else {
