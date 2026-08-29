@@ -10,7 +10,9 @@ use axum::{
     Json,
     body::Bytes,
 };
+use axum::extract::Multipart;
 use axum::http::{header, Method, StatusCode};
+use axum::routing::post;
 use axum_extra::either::Either;
 use crate::filec::FileCharter;
 use serde::Serialize;
@@ -46,7 +48,9 @@ impl Server {
             .route("/{*filename}", get(serve_dir))
             .route("/preview/{*image}", get(preview_image))
             .route("/download/{*file}", get(download_file))
-            .with_state(fileCharter)// Canonicalise at some point to stop bad attackeres.
+            .route("/read/{*file}", get(read_content))
+            .route("/upload", post(upload_file))
+            .with_state(fileCharter)// Canonicalize at some point to stop bad attackeres.
             .layer(
                 ServiceBuilder::new().layer(cors)
             );
@@ -129,6 +133,26 @@ async fn download_file(State(state): State<FileCharter>, Path(file): Path<String
         header,
         body,
         )
+}
+
+async fn read_content(State(state): State<FileCharter>, Path(file): Path<String>) -> Json<String> {
+    let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
+    let deep_dir = &root_path.join(&file);
+    let buffer = state.read_file(deep_dir.to_string_lossy().into_owned()).await.unwrap();
+
+    Json(buffer)
+}
+
+pub async fn upload_file(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap() {
+        let name = field.name().unwrap().to_string();
+        let filename = field.file_name().unwrap_or("uploaded_file").to_string();
+        // Gets teh field Object Field from multipart (http form data specific object). Uses tokio file system write, it asyncronously
+        // writes the file to a specified path appended {} filename to write the name of the file and then the content is body.,
+        let data = field.bytes().await.unwrap();
+        let from_root = std::env::home_dir().unwrap().canonicalize().unwrap().to_string_lossy().into_owned();
+        tokio::fs::write(format!("{from_root}/{}", filename), data).await.unwrap();
+    }
 }
 
 //

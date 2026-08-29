@@ -1,10 +1,13 @@
 use std::ffi::OsString;
 use std::fs::read_dir;
-use std::io;
+use std::{fs, io};
+use std::fmt::format;
 use std::path::{PathBuf};
 use axum::body::Body;
+use axum::extract::multipart::Multipart;
 use axum::http::{header, HeaderName, StatusCode};
 use axum::response::IntoResponse;
+use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
 
 
@@ -92,7 +95,6 @@ impl FileCharter {
 
     pub async fn download(&self, file: String) -> Result<((Body,[(HeaderName, String); 2])),()> {
         let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
-        println!("{file}");
         let deep_dir = &root_path.join(&file);
 
 
@@ -109,6 +111,21 @@ impl FileCharter {
 
         Ok((body, headers))
     }
+
+    pub async fn read_file(&self, file: String) -> Result<(String),()> {
+        let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
+        let deep_dir = &root_path.join(&file);
+
+        let content = fs::read_to_string(deep_dir).unwrap();
+        //
+        // let mut file = tokio::fs::File::open(&deep_dir).await.unwrap();
+        // let mut buffer = Vec::new();
+        // let content = file.read_to_end(&mut buffer).await.unwrap().to_ne_bytes().to_vec();
+
+
+        Ok(content)
+    }
+    
 }
 
 

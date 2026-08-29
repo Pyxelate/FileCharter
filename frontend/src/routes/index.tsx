@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import * as z from "zod";
 import {useQuery} from "@tanstack/react-query";
 import {File} from "../components/File.tsx";
+import {useState} from "react";
 
 const Files = z.object({
         directory: z.array(z.string()),
@@ -28,7 +29,7 @@ async function getFiles(): Promise<FileData> {
 
 
 export function Index() {
-
+    const [file, setFile] = useState<File | null>(null);
     const {data, isPending, isError, error} = useQuery({
         queryKey: ["files"],
         queryFn: getFiles,
@@ -37,10 +38,29 @@ export function Index() {
     if (isPending) return <div>Loading...</div>;
     if (isError) return <div>Something went wrong {error.message}</div>
 
+    function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+        if (e.target.files)  setFile(e.target.files[0])
+    }
+
+    async function handleUpload() {
+        const formData = new FormData();
+
+        formData.append("filename", file as File);
+
+        const res = await fetch("http://localhost:8080/upload", {
+            method: "POST",
+            body: formData,
+        })
+        console.log(res.ok)
+    }
 
     return (
         <>
             <main>
+                <div>
+                    <input onChange={handleFileChange} type="file"/>
+                    <button onClick={handleUpload}>Submit</button>
+                </div>
                 <div>
                     <ul className={"grid grid-cols-5 gap-1"}>
                         {/* Add option to hide or unhide files with . hidden extension.*/}
