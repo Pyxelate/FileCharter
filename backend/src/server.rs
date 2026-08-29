@@ -44,7 +44,8 @@ impl Server {
         let cors = CorsLayer::new().allow_methods([Method::GET, Method::POST]).allow_origin(Any);
         let fileCharter = FileCharter::new();
         // with state, requres the impl to have the trait Clone #[derive(Clone)], because it passes a new veresion of it everywhere.
-        let app = Router::new().route("/", get(serve_root_dir))
+        let app = Router::new()
+            .route("/", get(serve_root_dir))
             .route("/{*filename}", get(serve_dir))
             .route("/preview/{*image}", get(preview_image))
             .route("/download/{*file}", get(download_file))
@@ -89,7 +90,9 @@ async fn serve_root_dir(State(state): State<FileCharter>) -> Either<Json<Directo
 }
 
 async fn serve_dir(State(state): State<FileCharter>, Path(filename): Path<String>) -> Either<Json<Directory>, Json<Error>>{
+    println!("{filename}");
     let result = state.get_dir_files(filename);
+    // println!("{:?}", result.clone().unwrap());
 
     match result {
         Some(res) => {
