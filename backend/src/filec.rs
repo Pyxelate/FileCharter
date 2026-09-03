@@ -172,6 +172,7 @@
 //     assert_eq!(dir.to_str().unwrap(), "/Users/vincent");
 // }
 
+use axum::body::Body;
 use std::{
     borrow::Cow,
     env::home_dir,
@@ -228,6 +229,42 @@ impl<'a> FileCharter<'a> {
             Err(Error::new(ErrorKind::AddrNotAvailable, "error"))
         }
     }
+
+    pub async fn download_file(&self, url: &str) -> Result<Body, Error> {
+        let path_mut = self.temp_root.to_path_buf().join(url);
+
+        // Reads the file asynchronously
+        let open = tokio::fs::File::open(path_mut).await?;
+
+        let stream = tokio_util::io::ReaderStream::new(open);
+
+        let body = Body::from_stream(stream);
+        Ok(body)
+
+        // Header will be applied in controller
+        // (header::CONTENT_TYPE, "application/octet-stream".to_string()),
+        //             (
+        //                 header::CONTENT_DISPOSITION,
+        //                 format!("attachment/ filename=\"{:?}\"", deep_dir),
+        //             ),
+    }
+
+    pub async fn delete(&self, path: &str) -> Result<&str, Error> {
+        let path_mut = self.temp_root.to_path_buf().join(path);
+
+        let has_extension = path_mut.extension().is_some();
+
+        if has_extension {
+            tokio::fs::remove_file(path_mut).await?;
+            println!("File have been deleted");
+            Ok("ok")
+        } else {
+            // Removes entire folder
+            tokio::fs::remove_dir_all(path_mut).await?;
+            println!("The folder with content has been deleted");
+            Ok("ok")
+        }
+    }
 }
 
 #[cfg(test)]
@@ -254,5 +291,41 @@ mod test {
             .await
             .expect("");
         assert_vec(&paths);
+    }
+
+    async fn delete(path: &str) -> String {
+        let path_mut = std::env::home_dir()
+            .unwrap()
+            .canonicalize()
+            .unwrap()
+            .join(path);
+
+        let has_extension = path_mut.extension().is_some();
+
+        if has_extension {
+            // Removes file
+            // tokio::fs::remove_file(path_mut).await?;
+            String::from("File has been deleted")
+        } else {
+            // Removes entire folder
+            // tokio::fs::remove_dir_all(path_mut).await?;
+            String::from("Directory has been deleted")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_file() {
+        assert_eq!(
+            delete("text.txt").await,
+            "File has been deleted".to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_dir() {
+        assert_eq!(
+            delete("/item").await,
+            "Directory has been deleted".to_string()
+        );
     }
 }
