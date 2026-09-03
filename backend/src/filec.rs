@@ -173,18 +173,29 @@
 // }
 
 use std::{
+    borrow::Cow,
     env::home_dir,
     io::{Error, ErrorKind},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use tokio::fs::{ReadDir, read_dir};
 
 #[derive(Clone, Debug)]
-pub struct FileCharter {}
+pub struct FileCharter<'a> {
+    temp_root: Cow<'a, Path>,
+}
 
-impl FileCharter {
+impl<'a> FileCharter<'a> {
     pub fn new() -> Self {
-        FileCharter {}
+        let home = home_dir()
+            .expect("No home directory found")
+            .canonicalize()
+            .unwrap();
+
+        FileCharter {
+            // Maybe create a builder method to set custom roots for others to use.
+            temp_root: Cow::Owned(home),
+        }
     }
 
     async fn mapper(paths: &mut ReadDir) -> Result<Vec<String>, Error> {
@@ -204,13 +215,12 @@ impl FileCharter {
     }
 
     pub async fn get_dir_from_path(&self, url: &str) -> Result<Vec<String>, Error> {
-        let root = home_dir().expect("Can't find home directory");
-
+        let path_mut = self.temp_root.to_path_buf();
         if !(url == "/") {
-            root.join(url);
+            path_mut.join(url);
         }
 
-        let mut registries = read_dir(root).await?;
+        let mut registries = read_dir(path_mut).await?;
         let col = Self::mapper(&mut registries).await;
         if let Ok(i) = col {
             Ok(i)
@@ -233,6 +243,16 @@ mod test {
         let paths = charter.get_dir_from_path("/").await.expect("");
 
         // Call the assert_vec function. If the input is a vector this test will compile.
+        assert_vec(&paths);
+    }
+
+    #[tokio::test]
+    async fn get_nonroot_dir() {
+        let charter = FileCharter::new();
+        let paths = charter
+            .get_dir_from_path("/download/example.md")
+            .await
+            .expect("");
         assert_vec(&paths);
     }
 }
