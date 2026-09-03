@@ -56,6 +56,10 @@ impl Server {
         let listener = tokio::net::TcpListener::bind(address).await.unwrap();
         axum::serve(listener, app).await.unwrap();
     }
+
+    async fn test() {
+        println!("test");
+    }
 }
 
 // Very strict type safety, returning json needs a type of object that would be of json.
@@ -141,7 +145,6 @@ async fn read_content(State(state): State<FileCharter>, Path(file): Path<String>
 
 pub async fn upload_file(mut multipart: Multipart) -> impl IntoResponse {
     while let Some(field) = multipart.next_field().await.unwrap() {
-        let name = field.name().unwrap().to_string();
         let filename = field.file_name().unwrap_or("uploaded_file").to_string();
         // Gets teh field Object Field from multipart (http form data specific object). Uses tokio file system write, it asyncronously
         // writes the file to a specified path appended {} filename to write the name of the file and then the content is body.,

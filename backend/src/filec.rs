@@ -22,134 +22,6 @@
 //         FileCharter {}
 //     }
 
-//     async fn mapper(url: &ReadDir) -> Option<Vec<String>> {
-//         let files: Result<Vec<_>, io::Error> = url
-//             .map(|dir| {
-//                 dir.map(|p| {
-//                     p.path()
-//                         .file_name()
-//                         .expect("Can't get file name")
-//                         .to_string_lossy()
-//                         .into_owned()
-//                 })
-//             })
-//             .collect();
-//     }
-
-//     // Retrieves some string with directory path, should be passed via business layer.
-//     pub fn get_dir_path(&self, url: &str) -> Option<Vec<String>> {
-//         let root = std::env::home_dir()?;
-
-//         if url == "/" {
-//             let reg = read_dir(root).expect("Can't read dir");
-
-//             let files: Result<Vec<_>, io::Error> = reg
-//                 .map(|dir| {
-//                     dir.map(|p| {
-//                         p.path()
-//                             .file_name()
-//                             .expect("Can't get file name")
-//                             .to_string_lossy()
-//                             .into_owned()
-//                     })
-//                 })
-//                 .collect();
-
-//             if let Ok(e) = files { Some(e) } else { None }
-//         } else {
-//             None
-//         }
-//     }
-
-//     pub fn get_root_files(&self) -> Option<Vec<String>> {
-//         let root_path = std::env::home_dir().unwrap();
-//         let registries = read_dir(root_path);
-//         if let Ok(registry) = registries {
-//             let files: Result<Vec<_>, io::Error> = registry
-//                 .map(|t| {
-//                     t.map(|t1| {
-//                         t1.path()
-//                             .file_name()
-//                             .unwrap()
-//                             .to_string_lossy()
-//                             .into_owned()
-//                     })
-//                 })
-//                 .collect();
-
-//             if let Ok(e) = files { Some(e) } else { None }
-//         } else {
-//             None
-//         }
-//     }
-
-//     pub fn get_dir_files(&self, directory: String) -> Option<Vec<String>> {
-//         let root_path = std::env::home_dir().unwrap();
-//         let deep_dir = root_path.join(directory);
-//         println!("{:?}", &deep_dir);
-
-//         let registries = read_dir(deep_dir);
-//         if let Ok(registry) = registries {
-//             let files: Result<Vec<_>, io::Error> = registry
-//                 .map(|t| {
-//                     t.map(|t1| {
-//                         t1.path()
-//                             .file_name()
-//                             .unwrap()
-//                             .to_string_lossy()
-//                             .into_owned()
-//                     })
-//                 })
-//                 .collect();
-
-//             if let Ok(e) = files { Some(e) } else { None }
-//         } else {
-//             None
-//         }
-//     }
-
-//     // pub fn delete(&self, item: &str) -> Result<(), ()> {
-//     //     let splitted: Vec<_> = item.split(".").into_iter().collect();
-//     //     let full_path = PathBuf::from(item).canonicalize().unwrap();
-//     //
-//     //     // refactor this, could be one code instead of it being duplicated
-//     //     if splitted.len() >1 {
-//     //         let res = std::fs::remove_file(full_path);
-//     //         if let Ok(()) = res {
-//     //             Ok(())
-//     //         } else {
-//     //             Err(())
-//     //         }
-//     //     } else {
-//     //         let res = std::fs::remove_dir(full_path);
-//     //         if let Ok(()) = res {
-//     //             Ok(())
-//     //         } else {
-//     //             Err(())
-//     //         }
-//     //     }
-//     // }
-
-//     pub async fn download(&self, file: String) -> Result<((Body, [(HeaderName, String); 2])), ()> {
-//         let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
-//         let deep_dir = &root_path.join(&file);
-
-//         let open = tokio::fs::File::open(&deep_dir).await.unwrap();
-//         let read_content = ReaderStream::new(open);
-
-//         let body = Body::from_stream(read_content);
-
-//         let headers: [(HeaderName, String); 2] = [
-//             (header::CONTENT_TYPE, "application/octet-stream".to_string()),
-//             (
-//                 header::CONTENT_DISPOSITION,
-//                 format!("attachment/ filename=\"{:?}\"", deep_dir),
-//             ),
-//         ];
-
-//         Ok((body, headers))
-//     }
-
 //     pub async fn read_file(&self, file: String) -> Result<(String), ()> {
 //         let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
 //         let deep_dir = &root_path.join(&file);
@@ -164,15 +36,7 @@
 //     }
 // }
 
-// #[cfg(test)]
-// #[test]
-// fn is_home_dir() {
-//     let dir = std::env::home_dir().unwrap();
-//     // println!("{:?}", &dir);
-//     assert_eq!(dir.to_str().unwrap(), "/Users/vincent");
-// }
-
-use axum::body::Body;
+use axum::{body::Body, extract::Multipart};
 use std::{
     borrow::Cow,
     env::home_dir,
@@ -264,6 +128,38 @@ impl<'a> FileCharter<'a> {
             println!("The folder with content has been deleted");
             Ok("ok")
         }
+    }
+
+    pub async fn read_file(&self, file: &str) -> Result<String, Error> {
+        let path_mut = self.temp_root.to_path_buf().join(file);
+        let content = tokio::fs::read_to_string(path_mut).await?;
+        Ok(content)
+    }
+
+    pub async fn preview_img(&self, img: &str) -> Result<Vec<u8>, Error> {
+        let path_mut = self.temp_root.to_path_buf().join(img);
+        let content = tokio::fs::read(path_mut).await?;
+        Ok(content)
+        // Handled in controller layer
+        // StatusCode::OK,
+        // [
+        //     (header::CONTENT_TYPE, "image/png"),
+        //     (header::CACHE_CONTROL, "public, max-age=31536000"),
+        // ],
+        // Bytes::from(img),
+    }
+
+    pub async fn upload_file(&self, mut multipart: Multipart) -> Result<String, Error> {
+        let path_mut = self.temp_root.to_path_buf();
+        while let Some(field) = multipart.next_field().await.unwrap() {
+            let file = field.file_name().expect("File name not found").to_string();
+            let data = field
+                .bytes()
+                .await
+                .expect("Something went wrong with reading bytes");
+            tokio::fs::write(path_mut.join(file), data).await?;
+        }
+        Ok("Ok".to_string())
     }
 }
 
