@@ -2,14 +2,13 @@ import { Button } from "@/shadcn-components/ui/button"
 import {
     Popover,
     PopoverContent,
-    PopoverDescription,
     PopoverHeader,
-    PopoverTitle,
     PopoverTrigger,
 } from "@/shadcn-components/ui/popover"
 import {EllipsisVertical} from "lucide-react";
+import type {ReactNode} from "react";
 
-export function PopoverBasic({children}) {
+export function PopoverBasic({children}: {children: ReactNode}) {
     return (
         <>
             <Popover>
