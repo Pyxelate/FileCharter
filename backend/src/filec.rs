@@ -1,56 +1,17 @@
-// use axum::body::Body;
-// use axum::extract::multipart::Multipart;
-// use axum::http::{HeaderName, StatusCode, header};
-// use axum::response::IntoResponse;
-// use serde::ser::Error;
-// use std::ffi::OsString;
-// use std::fmt::format;
-// use std::fs::read_dir;
-// use std::path::PathBuf;
-// use std::{fs, io};
-// use tokio::fs::ReadDir;
-// use tokio::io::AsyncReadExt;
-// use tokio_util::io::ReaderStream;
-
-// // Overhaul this to become asynchronous with tokio, at the moment everything is blocking.
-
-// #[derive(Clone)]
-// pub struct FileCharter {}
-
-// impl FileCharter {
-//     pub fn new() -> Self {
-//         FileCharter {}
-//     }
-
-//     pub async fn read_file(&self, file: String) -> Result<(String), ()> {
-//         let root_path = std::env::home_dir().unwrap().canonicalize().unwrap();
-//         let deep_dir = &root_path.join(&file);
-
-//         let content = fs::read_to_string(deep_dir).unwrap();
-//         //
-//         // let mut file = tokio::fs::File::open(&deep_dir).await.unwrap();
-//         // let mut buffer = Vec::new();
-//         // let content = file.read_to_end(&mut buffer).await.unwrap().to_ne_bytes().to_vec();
-
-//         Ok(content)
-//     }
-// }
-
 use axum::{body::Body, extract::Multipart};
 use std::{
-    borrow::Cow,
     env::home_dir,
     io::{Error, ErrorKind},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use tokio::fs::{ReadDir, read_dir};
 
 #[derive(Clone, Debug)]
-pub struct FileCharter<'a> {
-    temp_root: Cow<'a, Path>,
+pub struct FileCharter {
+    temp_root: PathBuf,
 }
 
-impl<'a> FileCharter<'a> {
+impl FileCharter {
     pub fn new() -> Self {
         let home = home_dir()
             .expect("No home directory found")
@@ -59,7 +20,7 @@ impl<'a> FileCharter<'a> {
 
         FileCharter {
             // Maybe create a builder method to set custom roots for others to use.
-            temp_root: Cow::Owned(home),
+            temp_root: home.clone(),
         }
     }
 
@@ -79,23 +40,30 @@ impl<'a> FileCharter<'a> {
         Ok(directories)
     }
 
-    pub async fn get_dir_from_path(&self, url: &str) -> Result<Vec<String>, Error> {
-        let path_mut = self.temp_root.to_path_buf();
-        if !(url == "/") {
-            path_mut.join(url);
-        }
-
-        let mut registries = read_dir(path_mut).await?;
+    async fn return_result(&self, path: &PathBuf) -> Result<Vec<String>, Error> {
+        let mut registries = read_dir(path).await?;
         let col = Self::mapper(&mut registries).await;
         if let Ok(i) = col {
+            println!("{i:?}");
             Ok(i)
         } else {
             Err(Error::new(ErrorKind::AddrNotAvailable, "error"))
         }
     }
 
+    pub async fn get_dir_from_path(&self, url: &str) -> Result<Vec<String>, Error> {
+        let path_mut = &self.temp_root;
+
+        if !(url == "/") {
+            let joined_path = path_mut.join(url);
+            self.return_result(&joined_path).await
+        } else {
+            self.return_result(path_mut).await
+        }
+    }
+
     pub async fn download_file(&self, url: &str) -> Result<Body, Error> {
-        let path_mut = self.temp_root.to_path_buf().join(url);
+        let path_mut = &self.temp_root.join(url);
 
         // Reads the file asynchronously
         let open = tokio::fs::File::open(path_mut).await?;
@@ -104,17 +72,10 @@ impl<'a> FileCharter<'a> {
 
         let body = Body::from_stream(stream);
         Ok(body)
-
-        // Header will be applied in controller
-        // (header::CONTENT_TYPE, "application/octet-stream".to_string()),
-        //             (
-        //                 header::CONTENT_DISPOSITION,
-        //                 format!("attachment/ filename=\"{:?}\"", deep_dir),
-        //             ),
     }
 
     pub async fn delete(&self, path: &str) -> Result<&str, Error> {
-        let path_mut = self.temp_root.to_path_buf().join(path);
+        let path_mut = &self.temp_root.join(path);
 
         let has_extension = path_mut.extension().is_some();
 
@@ -131,26 +92,19 @@ impl<'a> FileCharter<'a> {
     }
 
     pub async fn read_file(&self, file: &str) -> Result<String, Error> {
-        let path_mut = self.temp_root.to_path_buf().join(file);
+        let path_mut = &self.temp_root.join(file);
         let content = tokio::fs::read_to_string(path_mut).await?;
         Ok(content)
     }
 
     pub async fn preview_img(&self, img: &str) -> Result<Vec<u8>, Error> {
-        let path_mut = self.temp_root.to_path_buf().join(img);
+        let path_mut = &self.temp_root.join(img);
         let content = tokio::fs::read(path_mut).await?;
         Ok(content)
-        // Handled in controller layer
-        // StatusCode::OK,
-        // [
-        //     (header::CONTENT_TYPE, "image/png"),
-        //     (header::CACHE_CONTROL, "public, max-age=31536000"),
-        // ],
-        // Bytes::from(img),
     }
 
     pub async fn upload_file(&self, mut multipart: Multipart) -> Result<String, Error> {
-        let path_mut = self.temp_root.to_path_buf();
+        let path_mut = &self.temp_root.to_path_buf();
         while let Some(field) = multipart.next_field().await.unwrap() {
             let file = field.file_name().expect("File name not found").to_string();
             let data = field

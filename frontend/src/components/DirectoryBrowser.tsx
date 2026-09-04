@@ -103,7 +103,7 @@ export function DirectoryBrowser({splat}: {splat: string}) {
         const imageFormat = ["jpg", "png"];
 
         if (imageFormat.some(i => fullPath.includes(i))) {
-            const response = await fetch(`http://localhost:8080/preview/${fullPath}`);
+            const response = await fetch(`http://localhost:8080/preview/image/${fullPath}`);
             const blob = await response.blob();
             const imgUrl = URL.createObjectURL(blob);
             setContentPreview(imgUrl);
@@ -122,7 +122,7 @@ export function DirectoryBrowser({splat}: {splat: string}) {
 
     async function read_content(file: string) {
         const new_slice = canonicalize(file, splat)
-        const response = await fetch(`http://localhost:8080/read/${new_slice}`);
+        const response = await fetch(`http://localhost:8080/preview/file/${new_slice}`);
         return await response.json()
     }
 
