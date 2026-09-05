@@ -44,7 +44,6 @@ impl FileCharter {
         let mut registries = read_dir(path).await?;
         let col = Self::mapper(&mut registries).await;
         if let Ok(i) = col {
-            println!("{i:?}");
             Ok(i)
         } else {
             Err(Error::new(ErrorKind::AddrNotAvailable, "error"))

@@ -2,6 +2,7 @@ use crate::filec::FileCharter;
 use axum::extract::Multipart;
 use axum::http::{HeaderName, Method, StatusCode, header};
 use axum::routing::{delete, post};
+
 use axum::{
     Json, Router,
     body::Bytes,
@@ -10,49 +11,146 @@ use axum::{
     routing::get,
 };
 use axum_extra::either::Either;
-use serde::Serialize;
+use axum_login::{AuthManagerLayer, login_required};
+use axum_login::{AuthManagerLayerBuilder, AuthUser, AuthnBackend, UserId};
+use password_auth::verify_password;
+use serde::{Deserialize, Serialize};
+use std::error::Error;
 use std::fmt::format;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::task;
 use tower::ServiceBuilder;
-use tower_http::classify::GrpcCode::Ok;
 use tower_http::cors::{Any, CorsLayer};
+use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer, cookie::time::Duration};
 
 #[derive(Clone)]
-pub struct Server {
-    charter: FileCharter,
-}
+pub struct Server {}
 
 #[derive(Serialize)]
 struct Directory {
     directory: Vec<String>,
 }
 
-#[derive(Serialize)]
-struct Error {
-    code: i32,
-    message: String,
-}
+// #[derive(Serialize)]
+// struct Error {
+//     code: i32,
+//     message: String,
+// }
 
 #[derive(Clone)]
 struct AppState {
     charter: Arc<FileCharter>,
 }
 
-impl Server {
-    pub fn new() -> Self {
-        Server {
-            charter: FileCharter::new(),
-        }
+use mongodb::{
+    Client, Collection, Database,
+    bson::{Document, doc, oid::ObjectId},
+};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct Users {
+    #[serde(rename = "_id")]
+    id: Option<ObjectId>,
+    username: String,
+    password: String,
+}
+
+impl AuthUser for Users {
+    type Id = ObjectId;
+
+    fn id(&self) -> Self::Id {
+        self.id.unwrap()
     }
 
-    pub async fn start(&self) {
+    fn session_auth_hash(&self) -> &[u8] {
+        &self.password.as_bytes()
+    }
+}
+
+#[derive(Clone, Deserialize)]
+struct Credentials {
+    username: String,
+    password: String,
+}
+
+#[derive(Clone)]
+struct Backend {
+    users: Collection<Users>,
+}
+#[derive(Debug, thiserror::Error)]
+enum AuthErrors {
+    #[error(transparent)]
+    Mongo(#[from] mongodb::error::Error),
+    #[error(transparent)]
+    TaskJoin(#[from] task::JoinError),
+}
+
+impl Backend {
+    pub fn new(db: &Database) -> Self {
+        Self {
+            users: db.collection("users"),
+        }
+    }
+}
+
+impl AuthnBackend for Backend {
+    type User = Users;
+    type Credentials = Credentials;
+    type Error = AuthErrors;
+
+    async fn authenticate(
+        &self,
+        creds: Self::Credentials,
+    ) -> Result<Option<Self::User>, Self::Error> {
+        // We have to manually implement the authenticate functionality. Authentication with argon2 is blocking,
+        // best to do it asynchronously.
+
+        let user = self
+            .users
+            .find_one(doc! {"username": &creds.username})
+            .await?;
+        let verified = task::spawn_blocking(move || {
+            user.filter(|u| verify_password(&creds.password, &u.password).is_ok())
+        })
+        .await?;
+        Ok(verified)
+    }
+
+    async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
+        // Uses Mongodb's function calls to fetch user, sort of like an sql query select user where username = ...
+        Ok(self.users.find_one(doc! {"_id": *user_id}).await?)
+    }
+}
+
+impl Server {
+    pub fn new() -> Self {
+        Server {}
+    }
+
+    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+        let username =
+            std::env::var("MONGO_INITDB_ROOT_USERNAME").unwrap_or_else(|_| "mongo".to_string());
+        let password =
+            std::env::var("MONGO_INITDB_ROOT_PASSWORD").unwrap_or_else(|_| "password".to_string());
+        let uri = format!("mongodb://{}:{}@localhost:27017", username, password);
+        let client = Client::with_uri_str(uri).await?;
+        let db = client.database("local_users");
+        // let users: Collection<Users> = db.collection("users");
+        let backend = Backend::new(&db);
+        let session_expiry = Expiry::OnInactivity(Duration::hours(1));
+        let session_store = MemoryStore::default();
+        let session_layer = SessionManagerLayer::new(session_store).with_expiry(session_expiry);
+
+        let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
+
         let cors = CorsLayer::new()
             .allow_methods([Method::GET, Method::POST])
             .allow_origin(Any);
         let file_charter = AppState {
             charter: Arc::new(FileCharter::new()),
         };
+
         // with state, requres the impl to have the trait Clone #[derive(Clone)], because it passes a new veresion of it everywhere.
         let app = Router::new()
             .route("/", get(root_dir))
@@ -62,13 +160,37 @@ impl Server {
             .route("/download/{*file}", get(download_file))
             .route("/delete/{*file}", delete(delete_file))
             .route("/upload", post(upload_file))
+            .route_layer(login_required!(Backend))
+            .route("/login", post(login))
             .with_state(file_charter) // Canonicalize at some point to stop bad attackeres.
-            .layer(ServiceBuilder::new().layer(cors));
+            .layer(ServiceBuilder::new().layer(cors))
+            .layer(auth_layer);
 
         let address = "127.0.0.1:8080";
 
         let listener = tokio::net::TcpListener::bind(address).await.unwrap();
         axum::serve(listener, app).await.unwrap();
+        Ok(())
+    }
+}
+
+//
+// Controller layer
+//
+
+async fn login(
+    mut auth: axum_login::AuthSession<Backend>,
+    axum::Json(creds): axum::Json<Credentials>,
+) -> impl IntoResponse {
+    match auth.authenticate(creds).await {
+        // Authenticate returns a result of optional user. Calls the auth session login method.
+        Ok(Some(user)) => {
+            let _ = auth.login(&user).await;
+            StatusCode::OK
+        }
+        // If result returns none, then user is unauthorized.
+        Ok(None) => StatusCode::UNAUTHORIZED,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
