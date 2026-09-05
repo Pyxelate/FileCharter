@@ -119,62 +119,132 @@ impl FileCharter {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tempfile::tempdir;
+    use tokio::fs;
 
-    // A function that takes in a Vector of type T.
-    fn assert_vec<T>(_v: &Vec<T>) {}
-
-    #[tokio::test]
-    async fn get_dirs() {
-        let charter = FileCharter::new();
-        let paths = charter.get_dir_from_path("/").await.expect("");
-
-        // Call the assert_vec function. If the input is a vector this test will compile.
-        assert_vec(&paths);
-    }
-
-    #[tokio::test]
-    async fn get_nonroot_dir() {
-        let charter = FileCharter::new();
-        let paths = charter
-            .get_dir_from_path("/download/example.md")
-            .await
-            .expect("");
-        assert_vec(&paths);
-    }
-
-    async fn delete(path: &str) -> String {
-        let path_mut = std::env::home_dir()
-            .unwrap()
-            .canonicalize()
-            .unwrap()
-            .join(path);
-
-        let has_extension = path_mut.extension().is_some();
-
-        if has_extension {
-            // Removes file
-            // tokio::fs::remove_file(path_mut).await?;
-            String::from("File has been deleted")
-        } else {
-            // Removes entire folder
-            // tokio::fs::remove_dir_all(path_mut).await?;
-            String::from("Directory has been deleted")
+    // Build a FileCharter rooted at an isolated temp dir so tests never touch the
+    // real $HOME. Constructing the struct directly lets us inject a custom root
+    // (FileCharter::new() always points at the home directory).
+    //
+    // The FileCharter object takes a pathBuf object, it is initialised and set to home dir by default when calling its constructor.
+    fn charter_at(root: &std::path::Path) -> FileCharter {
+        FileCharter {
+            temp_root: root.to_path_buf(),
         }
     }
 
+    // Uses tempdir crate, which allows us to create temporary directory in the file system and immediately destroy it
+    // once destructor is called or when it goes out of scope.
     #[tokio::test]
-    async fn test_delete_file() {
-        assert_eq!(
-            delete("text.txt").await,
-            "File has been deleted".to_string()
-        );
+    async fn lists_root_directory_entries() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("sub")).await.unwrap();
+        fs::write(dir.path().join("a.txt"), b"hi").await.unwrap();
+
+        let charter = charter_at(dir.path());
+        let mut entries = charter.get_dir_from_path("/").await.unwrap();
+        entries.sort();
+
+        assert_eq!(entries, vec!["a.txt".to_string(), "sub".to_string()]);
     }
 
     #[tokio::test]
-    async fn test_delete_dir() {
-        assert_eq!(
-            delete("/item").await,
-            "Directory has been deleted".to_string()
-        );
+    async fn lists_nested_directory_entries() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("docs")).await.unwrap();
+        fs::write(dir.path().join("docs").join("note.md"), b"x")
+            .await
+            .unwrap();
+
+        let charter = charter_at(dir.path());
+        let entries = charter.get_dir_from_path("docs").await.unwrap();
+
+        assert_eq!(entries, vec!["note.md".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn get_dir_from_missing_path_errors() {
+        let dir = tempdir().unwrap();
+        let charter = charter_at(dir.path());
+        assert!(charter.get_dir_from_path("does-not-exist").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn reads_file_contents() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("hello.txt"), b"hello world")
+            .await
+            .unwrap();
+
+        let charter = charter_at(dir.path());
+        let content = charter.read_file("hello.txt").await.unwrap();
+        assert_eq!(content, "hello world");
+    }
+
+    #[tokio::test]
+    async fn preview_img_returns_raw_bytes() {
+        let dir = tempdir().unwrap();
+        let bytes = [0u8, 1, 2, 3, 255];
+        fs::write(dir.path().join("pixel.png"), bytes)
+            .await
+            .unwrap();
+
+        let charter = charter_at(dir.path());
+        let out = charter.preview_img("pixel.png").await.unwrap();
+        assert_eq!(out, bytes.to_vec());
+    }
+
+    #[tokio::test]
+    async fn download_file_streams_contents() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("data.bin"), b"streamed-bytes")
+            .await
+            .unwrap();
+
+        let charter = charter_at(dir.path());
+        let body = charter.download_file("data.bin").await.unwrap();
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        assert_eq!(&bytes[..], b"streamed-bytes");
+    }
+
+    #[tokio::test]
+    async fn download_missing_file_errors() {
+        let dir = tempdir().unwrap();
+        let charter = charter_at(dir.path());
+        assert!(charter.download_file("nope.bin").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn deletes_a_file() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("temp.txt");
+        fs::write(&file, b"bye").await.unwrap();
+
+        let charter = charter_at(dir.path());
+        let result = charter.delete("temp.txt").await.unwrap();
+
+        assert_eq!(result, "ok");
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
+    async fn deletes_a_directory_recursively() {
+        let dir = tempdir().unwrap();
+        let folder = dir.path().join("folder");
+        fs::create_dir(&folder).await.unwrap();
+        fs::write(folder.join("inner.txt"), b"x").await.unwrap();
+
+        let charter = charter_at(dir.path());
+        let result = charter.delete("folder").await.unwrap();
+
+        assert_eq!(result, "ok");
+        assert!(!folder.exists());
+    }
+
+    #[tokio::test]
+    async fn delete_missing_file_errors() {
+        let dir = tempdir().unwrap();
+        let charter = charter_at(dir.path());
+        assert!(charter.delete("nope.txt").await.is_err());
     }
 }

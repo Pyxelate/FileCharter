@@ -154,7 +154,7 @@ impl Server {
         Server {}
     }
 
-    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn start(&self) -> Result<String, Box<dyn Error>> {
         let username =
             std::env::var("MONGO_INITDB_ROOT_USERNAME").unwrap_or_else(|_| "mongo".to_string());
         let password =
@@ -212,7 +212,7 @@ impl Server {
 
         let listener = tokio::net::TcpListener::bind(address).await.unwrap();
         axum::serve(listener, app).await.unwrap();
-        Ok(())
+        Ok("Ok".to_string())
     }
 }
 
@@ -337,6 +337,61 @@ async fn delete_file(State(state): State<AppState>, Path(file): Path<String>) ->
     Json(result.to_string())
 }
 
-// Very strict type safety, returning json needs a type of object that would be of json.
-// Using axum-extra Either is very handy. Either<E1, E2, ...> Where E1 could be json, and e2 could be a string for error
-// To return the type Either<E1, E2>: Either::E1({Object to return}) or Either::E2...
+#[cfg(test)]
+mod test {
+    // NOTE: the handlers and Backend talk to MongoDB, so they need an integration
+    // test with a live DB. These unit tests cover the pure logic that does not:
+    // password hashing/verification, the AuthUser impl, and (de)serialization.
+    use super::*;
+    use axum_login::AuthUser;
+
+    #[test]
+    fn password_hash_round_trip_verifies() {
+        let hash = generate_hash("correct horse");
+        // The stored value must be a PHC hash, never the plaintext.
+        assert!(hash.starts_with("$argon2"));
+        assert!(verify_password("correct horse", &hash).is_ok());
+    }
+
+    #[test]
+    fn password_verify_rejects_wrong_password() {
+        let hash = generate_hash("s3cret");
+        assert!(verify_password("not-it", &hash).is_err());
+    }
+
+    #[test]
+    fn password_verify_rejects_plaintext_stored_password() {
+        // Regression guard: a plaintext (non-hash) stored password must NOT verify.
+        // verify_password expects a PHC hash, so a plaintext value fails to parse.
+        assert!(verify_password("test", "test").is_err());
+    }
+
+    #[test]
+    fn auth_user_exposes_id_and_session_hash() {
+        let id = ObjectId::new();
+        let user = Users {
+            id,
+            username: "alice".to_string(),
+            password: "$argon2id$hash".to_string(),
+        };
+        assert_eq!(user.id(), id);
+        assert_eq!(user.session_auth_hash(), b"$argon2id$hash");
+    }
+
+    #[test]
+    fn credentials_deserialize_from_json() {
+        let creds: Credentials =
+            serde_json::from_str(r#"{"username":"bob","password":"pw"}"#).unwrap();
+        assert_eq!(creds.username, "bob");
+        assert_eq!(creds.password, "pw");
+    }
+
+    #[test]
+    fn directory_serializes_to_expected_json() {
+        let body = Directory {
+            directory: vec!["a".to_string(), "b".to_string()],
+        };
+        let json = serde_json::to_string(&body).unwrap();
+        assert_eq!(json, r#"{"directory":["a","b"]}"#);
+    }
+}
