@@ -1,7 +1,6 @@
 import { useState } from "react";
-// import {Button} from "@"
-
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { HardDrive, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/auth/")({
   component: RouteComponent,
@@ -9,112 +8,132 @@ export const Route = createFileRoute("/auth/")({
 
 function RouteComponent() {
   const navigate = useNavigate();
+  const [tab, setTab] = useState("login"); // "login" | "signup"
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  function usernameHandler(e) {
-    setUsername(e.target.value);
+  const isSignup = tab === "signup";
+
+  function switchTab(next) {
+    setTab(next);
+    setError("");
   }
 
-  function passwordHandler(e) {
-    setPassword(e.target.value);
-  }
-
-  async function submitLogin(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
+    setError("");
+    setBusy(true);
 
-    const response = await fetch("http://localhost:8080/login", {
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      method: "POST",
-      body: JSON.stringify({
-        username: username,
-        password: password,
-      }),
-    });
-    if (response.ok) {
-      navigate({ to: "/" });
+    const endpoint = isSignup ? "signup" : "login";
+    try {
+      const response = await fetch(`http://localhost:8080/${endpoint}`, {
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
+        navigate({ to: "/" });
+        return;
+      }
+
+      if (response.status === 401) {
+        setError("Invalid username or password.");
+      } else if (response.status === 409) {
+        setError("That username is already taken.");
+      } else if (response.status === 400) {
+        setError("Username and password are required.");
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function submitSignup(e) {
-    e.preventDefault();
-    console.log("test");
-    const response = await fetch("http://localhost:8080/signup", {
-      headers: {
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      credentials: "include",
-      body: JSON.stringify({
-        username: username,
-        password: password,
-      }),
-    });
-    if (response.ok) {
-      navigate({ to: "/" });
-    }
-  }
+  const tabClass = (active) =>
+    `flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition cursor-pointer ${
+      active
+        ? "bg-card text-foreground shadow-sm"
+        : "text-muted-foreground hover:text-foreground"
+    }`;
+
   return (
-    <div className="absolute left-50 right-50 w-20">
-      <h1>No authentication</h1>
-      <div>
-        <form>
-          <div className={"flex flex-col"}>
-            <label htmlFor="username">Username:</label>
+    <div className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <HardDrive className="size-6" />
+          </div>
+          <h1 className="text-lg font-semibold tracking-tight">FileCharter</h1>
+          <p className="text-sm text-muted-foreground">
+            {isSignup ? "Create an account to get started." : "Sign in to your files."}
+          </p>
+        </div>
+
+        <div className="mb-5 flex gap-1 rounded-lg border border-border bg-secondary p-1">
+          <button type="button" onClick={() => switchTab("login")} className={tabClass(!isSignup)}>
+            Login
+          </button>
+          <button type="button" onClick={() => switchTab("signup")} className={tabClass(isSignup)}>
+            Sign up
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="username" className="text-sm font-medium">
+              Username
+            </label>
             <input
-              onChange={usernameHandler}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               type="text"
               id="username"
               name="username"
               placeholder="Enter username"
+              autoComplete="username"
               required
+              className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/30"
             />
+          </div>
 
-            <label htmlFor="password">Password:</label>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="password" className="text-sm font-medium">
+              Password
+            </label>
             <input
-              onChange={passwordHandler}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               type="password"
               id="password"
               name="password"
               placeholder="Enter password"
+              autoComplete={isSignup ? "new-password" : "current-password"}
               required
+              className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/30"
             />
-
-            <button onClick={submitLogin} type="submit">
-              Submit
-            </button>
           </div>
-        </form>
 
-        <form>
-          <div className={"flex flex-col"}>
-            <label htmlFor="username">Username:</label>
-            <input
-              onChange={usernameHandler}
-              type="text"
-              id="username"
-              name="username"
-              placeholder="Enter username"
-              required
-            />
+          {error && (
+            <div className="rounded-lg bg-destructive/15 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
 
-            <label htmlFor="password">Password:</label>
-            <input
-              onChange={passwordHandler}
-              type="password"
-              id="password"
-              name="password"
-              placeholder="Enter password"
-              required
-            />
-
-            <button onClick={submitSignup} type="submit">
-              Submit
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60 cursor-pointer"
+          >
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {isSignup ? "Create account" : "Login"}
+          </button>
         </form>
       </div>
     </div>
