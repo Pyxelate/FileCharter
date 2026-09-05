@@ -25,20 +25,6 @@ const Files = z.object({
 type FileData = z.infer<typeof Files>;
 type ViewMode = "grid" | "list";
 
-// `splat` is the current directory relative to the home dir ("" for root).
-async function getFiles(splat: string): Promise<FileData> {
-    const url = splat ? `http://localhost:8080/${splat}` : "http://localhost:8080/";
-    const response = await fetch(url);
-
-    const result = Files.safeParse(await response.json());
-    if (result.success) {
-        return result.data
-    } else {
-        console.log(result.error.issues);
-        return Promise.reject("e");
-    }
-}
-
 function UploadButton() {
     const queryClient = useQueryClient();
     const inputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +40,7 @@ function UploadButton() {
         try {
             const response = await fetch("http://localhost:8080/upload", {
                 method: "POST",
+                credentials: "include",
                 body: form,
             })
             if (response.ok) {
@@ -173,7 +160,25 @@ export function DirectoryBrowser({splat}: {splat: string}) {
     const [contentPreview, setContentPreview] = useState("");
     const [fileContentPreview, setfileContentPreview] = useState("");
     const [view, setView] = useState<ViewMode>("grid");
-    const [query, setQuery] = useState("");
+  const [query, setQuery] = useState("");
+
+  // `splat` is the current directory relative to the home dir ("" for root).
+  async function getFiles(splat: string): Promise<FileData> {
+      const url = splat ? `http://localhost:8080/${splat}` : "http://localhost:8080/";
+      const response = await fetch(url, {credentials: "include"});
+
+    if (response.status == 401) {
+        navigate({to: "/auth"})
+      }
+
+      const result = Files.safeParse(await response.json());
+      if (result.success) {
+          return result.data
+      } else {
+          console.log(result.error.issues);
+          return Promise.reject("err");
+      }
+  }
 
     const navigate = useNavigate();
     const {data, isPending, isError, error} = useQuery({
@@ -196,7 +201,7 @@ export function DirectoryBrowser({splat}: {splat: string}) {
         const imageFormat = ["jpg", "png"];
 
         if (imageFormat.some(i => fullPath.includes(i))) {
-            const response = await fetch(`http://localhost:8080/preview/image/${fullPath}`);
+            const response = await fetch(`http://localhost:8080/preview/image/${fullPath}`, {credentials: "include"});
             const blob = await response.blob();
             const imgUrl = URL.createObjectURL(blob);
             setContentPreview(imgUrl);
@@ -215,14 +220,14 @@ export function DirectoryBrowser({splat}: {splat: string}) {
 
     async function read_content(file: string) {
         const new_slice = canonicalize(file, splat)
-        const response = await fetch(`http://localhost:8080/preview/file/${new_slice}`);
+        const response = await fetch(`http://localhost:8080/preview/file/${new_slice}`, {credentials: "include"});
         return await response.json()
     }
 
     async function download(downloadFile: string) {
         const new_slice = canonicalize(downloadFile, splat)
 
-        const file = await fetch(`http://localhost:8080/download/${new_slice}`)
+        const file = await fetch(`http://localhost:8080/download/${new_slice}`, {credentials: "include"})
         const blob = await file.blob();
         // In order to do things with a stream of bytes/data, it must be serialized to blob.
         const url = window.URL.createObjectURL(blob);
@@ -243,9 +248,10 @@ export function DirectoryBrowser({splat}: {splat: string}) {
         window.URL.revokeObjectURL(url);
     }
 
-  const items = (data?.directory ?? [])
+  // If the status of the getFiles function is 401, it instantly returns the return type "unauthenticated".
+  // Here, it catches the unauthenticated message before applying any filtering to what was supposed to be an array of file strings.
 
-        .filter((file) => file.toLowerCase().includes(query.trim().toLowerCase()));
+  const items = (data?.directory ?? []).filter((file) => file.toLowerCase().includes(query.trim().toLowerCase()));
 
     return (
         <div className="min-h-screen bg-background text-foreground">

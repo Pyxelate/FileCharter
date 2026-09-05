@@ -10,10 +10,11 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    dotenvy::dotenv().ok();
     let server = server::Server::new();
 
     // let test = users.find_one(doc! {"username": "mongoose"}).await?;
     // println!("{:?}", test);
-    server.start().await;
+    server.start().await?;
     Ok(())
 }

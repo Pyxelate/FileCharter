@@ -10,18 +10,15 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use axum_extra::either::Either;
-use axum_login::{AuthManagerLayer, login_required};
+// use axum_extra::either::Either;
 use axum_login::{AuthManagerLayerBuilder, AuthUser, AuthnBackend, UserId};
-use password_auth::verify_password;
+use axum_login::{AuthSession, login_required};
+use password_auth::{generate_hash, verify_password};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::fmt::format;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::task;
-use tower::ServiceBuilder;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer, cookie::time::Duration};
 
 #[derive(Clone)]
@@ -44,14 +41,15 @@ struct AppState {
 }
 
 use mongodb::{
-    Client, Collection, Database,
-    bson::{Document, doc, oid::ObjectId},
+    Client, Collection, Database, IndexModel,
+    bson::{doc, oid::ObjectId},
+    options::IndexOptions,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Users {
     #[serde(rename = "_id")]
-    id: Option<ObjectId>,
+    id: ObjectId,
     username: String,
     password: String,
 }
@@ -60,7 +58,7 @@ impl AuthUser for Users {
     type Id = ObjectId;
 
     fn id(&self) -> Self::Id {
-        self.id.unwrap()
+        self.id
     }
 
     fn session_auth_hash(&self) -> &[u8] {
@@ -92,6 +90,32 @@ impl Backend {
             users: db.collection("users"),
         }
     }
+
+    async fn create_user(
+        &self,
+        username: String,
+        password: String,
+    ) -> Result<(), mongodb::error::Error> {
+        let user = Users {
+            id: ObjectId::new(),
+            username,
+            password,
+        };
+
+        self.users.insert_one(user).await?;
+        Ok(())
+    }
+
+    // Enforce unique usernames at the database level. Idempotent once the index
+    // exists; fails only if the collection still contains duplicate usernames.
+    async fn ensure_indexes(&self) -> Result<(), mongodb::error::Error> {
+        let index = IndexModel::builder()
+            .keys(doc! {"username": 1})
+            .options(IndexOptions::builder().unique(true).build())
+            .build();
+        self.users.create_index(index).await?;
+        Ok(())
+    }
 }
 
 impl AuthnBackend for Backend {
@@ -105,15 +129,17 @@ impl AuthnBackend for Backend {
     ) -> Result<Option<Self::User>, Self::Error> {
         // We have to manually implement the authenticate functionality. Authentication with argon2 is blocking,
         // best to do it asynchronously.
-
+        println!("Trying to authenticate");
         let user = self
             .users
             .find_one(doc! {"username": &creds.username})
             .await?;
+        println!("{user:?}");
         let verified = task::spawn_blocking(move || {
             user.filter(|u| verify_password(&creds.password, &u.password).is_ok())
         })
         .await?;
+        println!("{verified:?}");
         Ok(verified)
     }
 
@@ -138,15 +164,27 @@ impl Server {
         let db = client.database("local_users");
         // let users: Collection<Users> = db.collection("users");
         let backend = Backend::new(&db);
+        // Enforce unique usernames. No-op once the index exists; logs a warning
+        // (rather than crashing) if the collection still has duplicates to clean up.
+        if let Err(e) = backend.ensure_indexes().await {
+            eprintln!("warning: could not create unique username index: {e}");
+        }
+
+        // This is just a copy of backend, may cause issue. I'm not sure.
         let session_expiry = Expiry::OnInactivity(Duration::hours(1));
         let session_store = MemoryStore::default();
         let session_layer = SessionManagerLayer::new(session_store).with_expiry(session_expiry);
 
         let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
+        use axum::http::{HeaderValue, header};
+
         let cors = CorsLayer::new()
-            .allow_methods([Method::GET, Method::POST])
-            .allow_origin(Any);
+            .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap()) // your frontend's real origin
+            .allow_methods([Method::GET, Method::POST, Method::DELETE]) // you have a DELETE route
+            .allow_headers([header::CONTENT_TYPE])
+            .allow_credentials(true);
+
         let file_charter = AppState {
             charter: Arc::new(FileCharter::new()),
         };
@@ -160,11 +198,15 @@ impl Server {
             .route("/download/{*file}", get(download_file))
             .route("/delete/{*file}", delete(delete_file))
             .route("/upload", post(upload_file))
+            // Route layer is the one that protects the routes. It handles the routes that is chained onto.
             .route_layer(login_required!(Backend))
+            // Public routes
             .route("/login", post(login))
-            .with_state(file_charter) // Canonicalize at some point to stop bad attackeres.
-            .layer(ServiceBuilder::new().layer(cors))
-            .layer(auth_layer);
+            .route("/signup", post(signup))
+            .layer(auth_layer)
+            // Cors go after auth layer
+            .layer(cors)
+            .with_state(file_charter);
 
         let address = "127.0.0.1:8080";
 
@@ -179,17 +221,45 @@ impl Server {
 //
 
 async fn login(
-    mut auth: axum_login::AuthSession<Backend>,
-    axum::Json(creds): axum::Json<Credentials>,
+    mut auth: AuthSession<Backend>,
+    Json(creds): Json<Credentials>,
 ) -> impl IntoResponse {
     match auth.authenticate(creds).await {
         // Authenticate returns a result of optional user. Calls the auth session login method.
         Ok(Some(user)) => {
-            let _ = auth.login(&user).await;
+            let _ = auth.login(&user).await.unwrap();
             StatusCode::OK
         }
         // If result returns none, then user is unauthorized.
         Ok(None) => StatusCode::UNAUTHORIZED,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+async fn signup(auth: AuthSession<Backend>, Json(creds): Json<Credentials>) -> impl IntoResponse {
+    let username = creds.username.trim().to_string();
+    if username.is_empty() || creds.password.is_empty() {
+        return StatusCode::BAD_REQUEST;
+    }
+
+    // Scans the DB for any users with the username passed. If it matches one, then it would return status code conflict.
+    match auth
+        .backend
+        .users
+        .find_one(doc! {"username": &username})
+        .await
+    {
+        Ok(Some(_)) => return StatusCode::CONFLICT,
+        Ok(None) => {}
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+    }
+
+    let hash = task::spawn_blocking(move || generate_hash(creds.password))
+        .await
+        .unwrap();
+
+    match auth.backend.create_user(username, hash).await {
+        Ok(()) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
