@@ -12,6 +12,25 @@ dist
 dist-ssr
 *.local
 
+# Build / bundler caches
+.vite/
+*.tsbuildinfo
+.turbo/
+
+# TanStack (Router/Start) generated output & temp build artifacts
+# (routeTree.gen.ts is intentionally committed, so it is NOT ignored)
+.tanstack/
+.output/
+.nitro/
+
+# Test coverage
+coverage/
+
+# Local env files
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

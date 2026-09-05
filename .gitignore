@@ -1,1 +1,33 @@
-/env
+# --- Environment / secrets ---
+# NOTE: the old rule "/env" did NOT match ".env", so credentials were tracked.
+.env
+.env.*
+!.env.example
+
+# --- OS files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# --- Editors / IDEs ---
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Docker / database volumes ---
+# The Mongo data lives in the named volume "mongo_data" (managed by Docker, not
+# in the repo). These guard against local bind-mounts of the DB data directory.
+/data/
+**/mongo_data/
+*.mongodb
+
+# --- Logs ---
+*.log
+logs/
