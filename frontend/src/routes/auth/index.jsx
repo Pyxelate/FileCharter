@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { HardDrive, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 export const Route = createFileRoute("/auth/")({
   component: RouteComponent,
@@ -72,15 +72,25 @@ function RouteComponent() {
           </div>
           <h1 className="text-lg font-semibold tracking-tight">FileCharter</h1>
           <p className="text-sm text-muted-foreground">
-            {isSignup ? "Create an account to get started." : "Sign in to your files."}
+            {isSignup
+              ? "Create an account to get started."
+              : "Sign in to your files."}
           </p>
         </div>
 
         <div className="mb-5 flex gap-1 rounded-lg border border-border bg-secondary p-1">
-          <button type="button" onClick={() => switchTab("login")} className={tabClass(!isSignup)}>
+          <button
+            type="button"
+            onClick={() => switchTab("login")}
+            className={tabClass(!isSignup)}
+          >
             Login
           </button>
-          <button type="button" onClick={() => switchTab("signup")} className={tabClass(isSignup)}>
+          <button
+            type="button"
+            onClick={() => switchTab("signup")}
+            className={tabClass(isSignup)}
+          >
             Sign up
           </button>
         </div>
