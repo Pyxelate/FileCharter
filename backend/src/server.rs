@@ -106,6 +106,15 @@ impl Backend {
             username,
             password,
         };
+        let mut count = 0;
+        let mut check = self.users.find(doc! {}).await?;
+        while check.advance().await? {
+            count += 1;
+
+            if count == 1 {
+                return Err(mongodb::error::Error::custom("e"));
+            }
+        }
 
         self.users.insert_one(user).await?;
         Ok(())
@@ -179,7 +188,9 @@ impl Server {
         // This is just a copy of backend, may cause issue. I'm not sure.
         let session_expiry = Expiry::OnInactivity(Duration::hours(1));
         let session_store = MemoryStore::default();
-        let session_layer = SessionManagerLayer::new(session_store).with_expiry(session_expiry);
+        let session_layer = SessionManagerLayer::new(session_store)
+            .with_expiry(session_expiry)
+            .with_secure(true);
 
         let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
