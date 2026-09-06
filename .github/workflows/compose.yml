@@ -1,0 +1,32 @@
+name: Docker compose test
+
+on:
+  push:
+    branches: [ main ]
+  pull:
+    branches: [ main ]
+
+jobs:
+  test-compose:
+    runs-on: ubuntu-26.04.1
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Test config
+      run: docker compose config
+
+    - name: Build containers
+      run: docker compose build
+
+    - name: Start compose
+      run: docker compose up
+
+    - name: Check statuses
+      run: |
+        sleep 10
+        docker compose ps
+
+    - name: Destroying containers.
+      if: always()
+      run: docker compose down -v
