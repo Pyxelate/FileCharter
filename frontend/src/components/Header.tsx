@@ -1,7 +1,17 @@
 import { UploadButton } from "./UploadButton.tsx";
 import { Search, List as ListIcon, LayoutGrid } from "lucide-react";
 
-export function Header({ query, setQuery, view, setView }) {
+export function Header({
+  query,
+  setQuery,
+  view,
+  setView,
+}: {
+  query: string;
+  setQuery: React.Dispatch<React.SetStateAction<string>>;
+  view: "grid" | "list";
+  setView: React.Dispatch<React.SetStateAction<"grid" | "list">>;
+}) {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-card/70 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">

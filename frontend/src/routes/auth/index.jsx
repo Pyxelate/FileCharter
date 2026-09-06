@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { HardDrive, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { BACKEND_URL } from "@/lib/getConfigs.ts";
 
 export const Route = createFileRoute("/auth/")({
   component: RouteComponent,
@@ -28,7 +29,7 @@ function RouteComponent() {
 
     const endpoint = isSignup ? "signup" : "login";
     try {
-      const response = await fetch(`http://localhost:8080/${endpoint}`, {
+      const response = await fetch(`${BACKEND_URL}/${endpoint}`, {
         headers: { "Content-Type": "application/json" },
         method: "POST",
         credentials: "include",

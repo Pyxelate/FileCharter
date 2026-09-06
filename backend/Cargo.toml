@@ -10,6 +10,7 @@ axum-login = "0.18.0"
 dotenvy = "0.15.7"
 password-auth = "1.0.0"
 serde = { version = "1.0.229", features = ["derive"] }
+serde_yaml = "0.9.34"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-util = { version = "0.7.19", features = ["io"] }

@@ -6,6 +6,7 @@ import { Loader2, TriangleAlert } from "lucide-react";
 
 import { File } from "./File.tsx";
 import { canonicalize } from "@/lib/strings.ts";
+import { BACKEND_URL } from "@/lib/getConfigs.ts";
 import { PreviewFile } from "./PreviewFile.tsx";
 import { PreviewImage } from "./PreviewImage.tsx";
 import { BreadCrumbs } from "./BreadCrumbs.tsx";
@@ -34,9 +35,7 @@ export function DirectoryBrowser({ splat }: { splat: string }) {
 
   // `splat` is the current directory relative to the home dir ("" for root).
   async function getFiles(splat: string): Promise<FileData> {
-    const url = splat
-      ? `http://localhost:8080/${splat}`
-      : "http://localhost:8080/";
+    const url = splat ? `${BACKEND_URL}/${splat}` : `${BACKEND_URL}/`;
     const response = await fetch(url, { credentials: "include" });
 
     if (response.status == 401) {
@@ -73,10 +72,9 @@ export function DirectoryBrowser({ splat }: { splat: string }) {
     const imageFormat = ["jpg", "png"];
 
     if (imageFormat.some((i) => fullPath.includes(i))) {
-      const response = await fetch(
-        `http://localhost:8080/preview/image/${fullPath}`,
-        { credentials: "include" },
-      );
+      const response = await fetch(`${BACKEND_URL}/preview/image/${fullPath}`, {
+        credentials: "include",
+      });
       const blob = await response.blob();
       const imgUrl = URL.createObjectURL(blob);
       setContentPreview(imgUrl);
@@ -95,17 +93,16 @@ export function DirectoryBrowser({ splat }: { splat: string }) {
 
   async function read_content(file: string) {
     const new_slice = canonicalize(file, splat);
-    const response = await fetch(
-      `http://localhost:8080/preview/file/${new_slice}`,
-      { credentials: "include" },
-    );
+    const response = await fetch(`${BACKEND_URL}/preview/file/${new_slice}`, {
+      credentials: "include",
+    });
     return await response.json();
   }
 
   async function download(downloadFile: string) {
     const new_slice = canonicalize(downloadFile, splat);
 
-    const file = await fetch(`http://localhost:8080/download/${new_slice}`, {
+    const file = await fetch(`${BACKEND_URL}/download/${new_slice}`, {
       credentials: "include",
     });
     const blob = await file.blob();

@@ -20,6 +20,7 @@ desktop.ini
 *.swp
 *.swo
 *~
+.zed/
 
 # --- Docker / database volumes ---
 # The Mongo data lives in the named volume "mongo_data" (managed by Docker, not

@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::filec::FileCharter;
 use axum::extract::Multipart;
 use axum::http::{HeaderName, Method, StatusCode, header};
@@ -18,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::sync::Arc;
 use tokio::task;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer, cookie::time::Duration};
 
 #[derive(Clone)]
@@ -28,12 +29,6 @@ pub struct Server {}
 struct Directory {
     directory: Vec<String>,
 }
-
-// #[derive(Serialize)]
-// struct Error {
-//     code: i32,
-//     message: String,
-// }
 
 #[derive(Clone)]
 struct AppState {
@@ -46,12 +41,22 @@ use mongodb::{
     options::IndexOptions,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Users {
     #[serde(rename = "_id")]
     id: ObjectId,
     username: String,
     password: String,
+}
+
+impl std::fmt::Debug for Users {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Users")
+            .field("id", &self.id)
+            .field("username", &self.username)
+            .field("password", &"[redacted]")
+            .finish()
+    }
 }
 
 impl AuthUser for Users {
@@ -155,14 +160,15 @@ impl Server {
     }
 
     pub async fn start(&self) -> Result<String, Box<dyn Error>> {
-        let username =
-            std::env::var("MONGO_INITDB_ROOT_USERNAME").unwrap_or_else(|_| "mongo".to_string());
-        let password =
-            std::env::var("MONGO_INITDB_ROOT_PASSWORD").unwrap_or_else(|_| "password".to_string());
-        let uri = format!("mongodb://{}:{}@localhost:27017", username, password);
-        let client = Client::with_uri_str(uri).await?;
+        let mongo_uri = format!(
+            "mongodb://{}:{}@mongodb:{}",
+            Config::get_mongo_username(),
+            Config::get_mongo_password(),
+            Config::get_mongo_port(),
+        );
+        let client = Client::with_uri_str(mongo_uri).await?;
         let db = client.database("local_users");
-        // let users: Collection<Users> = db.collection("users");
+
         let backend = Backend::new(&db);
         // Enforce unique usernames. No-op once the index exists; logs a warning
         // (rather than crashing) if the collection still has duplicates to clean up.
@@ -179,14 +185,29 @@ impl Server {
 
         use axum::http::{HeaderValue, header};
 
+        // Allow the configured frontend origin plus the Vite dev server. Behind a
+        // reverse proxy you'd add your real domain (or serve everything same-origin).
+        let frontend_origin = format!("http://localhost:{}", Config::get_frontend_port());
+        let origins = vec![
+            frontend_origin.parse::<HeaderValue>().unwrap(),
+            "http://localhost:5173".parse::<HeaderValue>().unwrap(),
+        ];
         let cors = CorsLayer::new()
-            .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap()) // your frontend's real origin
+            .allow_origin(AllowOrigin::list(origins))
             .allow_methods([Method::GET, Method::POST, Method::DELETE]) // you have a DELETE route
             .allow_headers([header::CONTENT_TYPE])
             .allow_credentials(true);
 
+        // Empty FILECHARTER_ROOT_DIR -> home dir (FileCharter::new), otherwise
+        // the configured directory.
+        let root = Config::get_root_directory_configuration();
+        let charter = if root.trim().is_empty() {
+            FileCharter::new()
+        } else {
+            FileCharter::with_root(std::path::PathBuf::from(root))
+        };
         let file_charter = AppState {
-            charter: Arc::new(FileCharter::new()),
+            charter: Arc::new(charter),
         };
 
         // with state, requres the impl to have the trait Clone #[derive(Clone)], because it passes a new veresion of it everywhere.
@@ -208,9 +229,9 @@ impl Server {
             .layer(cors)
             .with_state(file_charter);
 
-        let address = "127.0.0.1:8080";
+        let address = format!("0.0.0.0:{}", Config::get_host_port());
 
-        let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
         axum::serve(listener, app).await.unwrap();
         Ok("Ok".to_string())
     }

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Loader2, Upload } from "lucide-react";
+import { BACKEND_URL } from "@/lib/getConfigs.ts";
 
 export function UploadButton() {
   const queryClient = useQueryClient();
@@ -15,7 +16,7 @@ export function UploadButton() {
     const form = new FormData();
     form.append("file", chosen);
     try {
-      const response = await fetch("http://localhost:8080/upload", {
+      const response = await fetch(`${BACKEND_URL}/upload`, {
         method: "POST",
         credentials: "include",
         body: form,

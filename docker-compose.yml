@@ -3,13 +3,48 @@ services:
     image: mongo:8.3
     container_name: mongo_container
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     volumes:
       - mongo_data:/data/db
+    ports:
+      # localhost-only so a locally-run `cargo run` backend can reach Mongo.
+      - "127.0.0.1:${MONGO_PORT}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MONGO_HOST: mongodb
+      # Serve the bind-mounted host directory (the /data volume below), overriding
+      # whatever FILECHARTER_ROOT_DIR is set to in .env for local dev.
+      FILECHARTER_ROOT_DIR: /data
+    volumes:
+      # The app serves this mount when FILECHARTER_ROOT_DIR points at it (e.g. /data).
+      - ${FILES_DIR:-./files}:/data
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT}:80"
+    depends_on:
+      - backend
 
 volumes:
- mongo_data:
+  mongo_data:

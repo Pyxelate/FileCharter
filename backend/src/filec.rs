@@ -24,6 +24,13 @@ impl FileCharter {
         }
     }
 
+    // Build a FileCharter rooted at an explicit directory (used when the config
+    // provides a non-empty root-directory). An empty config value falls back to
+    // new(), which defaults to the home directory.
+    pub fn with_root(root: PathBuf) -> Self {
+        FileCharter { temp_root: root }
+    }
+
     async fn mapper(paths: &mut ReadDir) -> Result<Vec<String>, Error> {
         let mut directories: Vec<String> = Vec::new();
 
@@ -54,7 +61,7 @@ impl FileCharter {
         let path_mut = &self.temp_root;
 
         if !(url == "/") {
-            let joined_path = path_mut.join(url);
+            let joined_path = path_mut.join(url).canonicalize()?;
             self.return_result(&joined_path).await
         } else {
             self.return_result(path_mut).await
