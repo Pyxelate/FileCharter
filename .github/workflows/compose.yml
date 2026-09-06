@@ -13,6 +13,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # No .env exists in CI (it's git-ignored). Create one with throwaway values
+    # so compose interpolation, the backend's env_file, and the container env all
+    # have what they need. These are NOT real secrets — just enough to boot.
+    - name: Create .env for CI
+      run: |
+        cat > .env <<'EOF'
+        MONGO_USERNAME=mongo
+        MONGO_PASSWORD=password
+        MONGO_PORT=27017
+        FRONTEND_PORT=8080
+        BACKEND_PORT=3000
+        FILECHARTER_ROOT_DIR=/data
+        FILES_DIR=./files
+        EOF
+
     - name: Test config
       run: docker compose config
 
@@ -20,12 +35,10 @@ jobs:
       run: docker compose build
 
     - name: Start compose
-      run: docker compose up
+      run: docker compose up -d --wait
 
     - name: Check statuses
-      run: |
-        sleep 10
-        docker compose ps
+      run: docker compose ps
 
     - name: Destroying containers.
       if: always()
