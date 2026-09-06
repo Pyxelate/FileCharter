@@ -3,7 +3,7 @@ name: Docker compose test
 on:
   push:
     branches: [ main ]
-  pull:
+  pull_request:
     branches: [ main ]
 
 jobs:
